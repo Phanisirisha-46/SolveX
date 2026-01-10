@@ -14,6 +14,8 @@ def main():
                 print(value)
                 print("\n")
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"An error occurred: {e}")
         print("Please ensure .env is set up with API keys.")
 

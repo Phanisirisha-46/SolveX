@@ -15,7 +15,7 @@ class LLMFactory:
             )
         elif provider == "gemini":
             return ChatGoogleGenerativeAI(
-                model=model_name or "gemini-1.5-pro",
+                model=model_name or "gemini-flash-latest",
                 google_api_key=settings.GOOGLE_API_KEY,
                 temperature=0,
                 convert_system_message_to_human=True 
