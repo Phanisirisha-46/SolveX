@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Cpu } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -14,6 +14,17 @@ function App() {
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) return true;
     return false;
   });
+
+  // Model State
+  const [selectedModel, setSelectedModel] = useState('groq-llama3.3'); // Default to best
+
+  const models = [
+    { id: 'groq-llama3.3', name: 'DeepSeek-Math (Llama 3.3)', icon: '🧠' },
+    { id: 'groq-qwen2.5', name: 'Qwen 2.5 Math', icon: '➗' },
+    { id: 'groq-llama3.1', name: 'LLaMA 3.1 8B', icon: '⚡' },
+    { id: 'groq-gemma2', name: 'WizardMath (Gemma 2)', icon: '🧙' },
+    { id: 'gemini', name: 'Gemini 1.5 Pro', icon: '✨' },
+  ];
 
   useEffect(() => {
     if (darkMode) {
@@ -88,7 +99,10 @@ function App() {
       const response = await fetch('http://localhost:8000/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input_text: userMessage.content }),
+        body: JSON.stringify({
+          input_text: userMessage.content,
+          model_provider: selectedModel
+        }),
       });
 
       if (!response.ok) {
@@ -234,7 +248,7 @@ function App() {
                             remarkPlugins={[remarkMath]}
                             rehypePlugins={[rehypeKatex]}
                           >
-                            {msg.content}
+                            {String(msg.content || '')}
                           </ReactMarkdown>
                         </div>
                       ) : (
@@ -273,7 +287,28 @@ function App() {
 
         {/* Input Area */}
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-50 via-gray-50 dark:from-gray-900 dark:via-gray-900 to-transparent pt-10 pb-6 px-4 transition-colors duration-200">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-3xl mx-auto space-y-3">
+            {/* Model Selector */}
+            <div className="flex justify-center">
+              <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1">
+                {models.map(model => (
+                  <button
+                    key={model.id}
+                    onClick={() => setSelectedModel(model.id)}
+                    className={`
+                                px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5
+                                ${selectedModel === model.id
+                        ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}
+                            `}
+                  >
+                    <span>{model.icon}</span>
+                    <span className="hidden sm:inline">{model.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <form onSubmit={handleSubmit} className="relative group">
               <input
                 type="text"

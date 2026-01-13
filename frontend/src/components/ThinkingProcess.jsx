@@ -44,13 +44,12 @@ const ThinkingProcess = ({ steps, isComplete }) => {
                                 exit={{ height: 0, opacity: 0 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                <div className="p-4 bg-white dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300">
+                                <div className="p-4 bg-white dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300 prose prose-sm dark:prose-invert max-w-none">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkMath]}
                                         rehypePlugins={[rehypeKatex]}
-                                        className="prose prose-sm dark:prose-invert max-w-none"
                                     >
-                                        {step.content}
+                                        {String(step.content || '')}
                                     </ReactMarkdown>
                                 </div>
                             </motion.div>
