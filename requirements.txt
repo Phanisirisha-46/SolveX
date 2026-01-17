@@ -12,3 +12,4 @@ fastapi
 uvicorn
 langchain-groq
 langchain-anthropic
+qdrant-client

@@ -1,11 +1,30 @@
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from src.graph import app as graph_app
+import sys
 import uvicorn
 import os
 
-app = FastAPI(title="SolveX API")
+# Set encoding for Windows console
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
+
+from dotenv import load_dotenv
+load_dotenv()
+
+from contextlib import asynccontextmanager
+from src.storage import init_qdrant, store_chat, get_qdrant_client
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_qdrant()
+    yield
+    # Shutdown
+
+app = FastAPI(title="SolveX API", lifespan=lifespan)
 
 # Configure CORS
 origins = [
@@ -15,7 +34,7 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,7 +42,7 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     input_text: str
-    model_provider: str = "openai"
+    model_provider: str = "groq"
     model_name: str | None = None
 
 @app.post("/chat")
@@ -83,6 +102,16 @@ async def chat(request: ChatRequest):
                     step_info["content"] = f"Here are similar problems to try:\n\n{prob_str}"
 
                 steps.append(step_info)
+        
+        # Store chat in Qdrant
+        await store_chat(
+            user_input=request.input_text, 
+            bot_response=final_explanation,
+            metadata={
+                "model_provider": request.model_provider,
+                "model_name": request.model_name
+            }
+        )
 
         return {
             "response": final_explanation,
@@ -92,6 +121,22 @@ async def chat(request: ChatRequest):
     except Exception as e:
         import traceback
         traceback.print_exc()
+        with open("error.log", "w") as f:
+            f.write(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/chats")
+async def get_chats():
+    try:
+        client = get_qdrant_client()
+        result, _ = client.scroll(
+            collection_name="chats",
+            limit=50,
+            with_payload=True,
+            with_vectors=False
+        )
+        return {"chats": [point.payload for point in result]}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
