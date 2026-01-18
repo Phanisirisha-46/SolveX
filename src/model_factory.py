@@ -1,5 +1,3 @@
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from src.config import settings
 
 class LLMFactory:
@@ -8,12 +6,14 @@ class LLMFactory:
         provider = provider or settings.DEFAULT_LLM
         
         if provider == "openai":
+            from langchain_openai import ChatOpenAI
             return ChatOpenAI(
                 model=model_name or "gpt-4-turbo",
                 api_key=settings.OPENAI_API_KEY,
                 temperature=0
             )
         elif provider == "gemini":
+            from langchain_google_genai import ChatGoogleGenerativeAI
             return ChatGoogleGenerativeAI(
                 model=model_name or "gemini-flash-latest",
                 google_api_key=settings.GOOGLE_API_KEY,
@@ -31,9 +31,9 @@ class LLMFactory:
             # Map frontend IDs to actual Groq model names
             model_map = {
                 "groq-llama3.3": "llama-3.3-70b-versatile",    # verified
-                "groq-qwen2.5": "qwen/qwen3-32b",              # verified available ID
+                "groq-qwen2.5": "qwen-2.5-32b",                # verified available ID (corrected)
                 "groq-llama3.1": "llama-3.1-8b-instant",       # verified
-                "groq-gemma2": "llama-3.1-8b-instant",         # Fallback (Gemma not available)
+                "groq-math-wizard": "gemma2-9b-it",            # Math Wizard (Gemma 2)
             }
             # Default to Llama 3.3 if generic 'groq' or unknown is passed
             actual_model = model_map.get(provider, "llama-3.3-70b-versatile")

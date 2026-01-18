@@ -45,7 +45,7 @@ class ChatRequest(BaseModel):
     model_provider: str = "groq"
     model_name: str | None = None
 
-@app.post("/chat")
+@app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
         print(f"Received request: {request.input_text} using {request.model_provider}")
@@ -100,6 +100,11 @@ async def chat(request: ChatRequest):
                     problems = state.get('practice_problems', [])
                     prob_str = "\n".join([f"{i+1}. {p}" for i, p in enumerate(problems)])
                     step_info["content"] = f"Here are similar problems to try:\n\n{prob_str}"
+                    step_info["content"] = f"Here are similar problems to try:\n\n{prob_str}"
+                elif node_name == "resources":
+                    step_info["title"] = "Related Resources"
+                    # Expecting a bullet list from LLM
+                    step_info["content"] = state.get('references', [''])[0]
 
                 steps.append(step_info)
         
@@ -125,7 +130,7 @@ async def chat(request: ChatRequest):
             f.write(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/chats")
+@app.get("/api/chats")
 async def get_chats():
     try:
         client = get_qdrant_client()

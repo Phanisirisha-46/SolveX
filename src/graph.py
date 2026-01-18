@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     solution: str
     explanation: str
     practice_problems: List[str]
+    references: List[str]
 
 # Helper to get LLM from config
 def get_llm_from_config(config):
@@ -41,23 +42,37 @@ def extract_equations(state: AgentState, config):
     llm = get_llm_from_config(config)
     prompt = f"Extract variables and equations from this {state['problem_type']} problem: {state['input_text']}. Return them as a python list of strings."
     response = llm.invoke([HumanMessage(content=prompt)])
-    # Naive parsing for skeleton - in production use structured output
     return {"equations": [response.content]} 
+
+import re
 
 def solve_equations(state: AgentState, config):
     print("---SOLVING EQUATIONS---")
-    # For now, we mock the solution step or use LLM if not using SymPy
     llm = get_llm_from_config(config)
-    prompt = f"Solve these equations step-by-step: {state.get('equations')}. Return the final solution."
+    # STRICT BOLDING INSTRUCTION
+    prompt = f"Solve these equations step-by-step: {state.get('equations')}. **CRITICAL**: You MUST use bold formatting for EVERY step number (e.g., '**Step 1:**', '**Step 2:**'). Do not use plain text for step headers. Return the final solution."
     response = llm.invoke([HumanMessage(content=prompt)])
-    return {"solution": response.content}
+    
+    # Force bolding via Regex
+    content = response.content
+    content = re.sub(r'(?m)^(Step \d+:?)', r'**\1**', content) # Matches "Step 1:" at start of line
+    content = re.sub(r'\*\*(Step \d+:?)\*\*', r'**\1**', content) # Avoid double bolding if LLM did it right
+    
+    return {"solution": content}
 
 def generate_explanation(state: AgentState, config):
     print("---GENERATING EXPLANATION---")
     llm = get_llm_from_config(config)
-    prompt = f"Provide a clear, step-by-step explanation for the solution: {state['solution']}, given the original problem: {state['input_text']}"
+    # STRICT BOLDING INSTRUCTION
+    prompt = f"Provide a clear, step-by-step explanation for the solution: {state['solution']}, given the original problem: {state['input_text']}. **CRITICAL**: Format every step header in BOLD (e.g., '**Step 1:**', '**Step 2:**')."
     response = llm.invoke([HumanMessage(content=prompt)])
-    return {"explanation": response.content}
+    
+    # Force bolding via Regex
+    content = response.content
+    content = re.sub(r'(?m)^(Step \d+:?)', r'**\1**', content)
+    content = re.sub(r'\*\*(Step \d+:?)\*\*', r'**\1**', content) # Fix double bolding
+    
+    return {"explanation": content}
 
 def generate_practice(state: AgentState, config):
     print("---GENERATING PRACTICE---")
@@ -67,15 +82,31 @@ def generate_practice(state: AgentState, config):
     problems = response.content.split("\n")
     return {"practice_problems": [p for p in problems if p.strip()]}
 
+def generate_resources(state: AgentState, config):
+    print("---GENERATING RESOURCES---")
+    llm = get_llm_from_config(config)
+    prompt = f"""
+    Suggest 2 YouTube videos and 2 Medium articles strictly related to '{state['problem_type']}' and '{state['input_text']}'.
+    
+    Return them as a bulleted list of Markdown links. 
+    - For YouTube, construct the link as: `[Video Title](https://www.youtube.com/results?search_query=Video+Title)`
+    - For Medium, construct the link as: `[Article Title](https://medium.com/search?q=Article+Title)`
+    
+    Do not invent fake VIDEO IDs. Use the search query format to ensure links work.
+    """
+    response = llm.invoke([HumanMessage(content=prompt)])
+    return {"references": [response.content]}
+
 # Graph Construction
 workflow = StateGraph(AgentState)
 
 workflow.add_node("classify", classify_problem)
 workflow.add_node("real_world", generate_real_world_context)
 workflow.add_node("extract", extract_equations)
-workflow.add_node("solve", solve_equations) # Solves
-workflow.add_node("explain", generate_explanation) # Explains
+workflow.add_node("solve", solve_equations)
+workflow.add_node("explain", generate_explanation)
 workflow.add_node("practice", generate_practice)
+workflow.add_node("resources", generate_resources)
 
 workflow.set_entry_point("classify")
 
@@ -84,6 +115,7 @@ workflow.add_edge("real_world", "extract")
 workflow.add_edge("extract", "solve")
 workflow.add_edge("solve", "explain")
 workflow.add_edge("explain", "practice")
-workflow.add_edge("practice", END)
+workflow.add_edge("practice", "resources")
+workflow.add_edge("resources", END)
 
 app = workflow.compile()

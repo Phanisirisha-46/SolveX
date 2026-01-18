@@ -1,9 +1,6 @@
 langchain
 langgraph
-sympy
-openai
 google-generativeai
-langchain-openai
 langchain-google-genai
 python-dotenv
 pydantic
@@ -11,5 +8,4 @@ pydantic-settings
 fastapi
 uvicorn
 langchain-groq
-langchain-anthropic
 qdrant-client

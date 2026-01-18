@@ -22,3 +22,4 @@ venv.bak/
 # Temporary/Output Files
 sample_output.txt
 test_gemini.py
+.vercel

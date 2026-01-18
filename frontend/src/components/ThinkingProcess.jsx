@@ -16,23 +16,25 @@ const ThinkingProcess = ({ steps, isComplete }) => {
     return (
         <div className="w-full max-w-2xl mx-auto my-4 space-y-2">
             {steps.map((step, index) => (
-                <div key={index} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800 shadow-sm transition-colors duration-200">
+                <div key={index} className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-slate-50 dark:bg-slate-800/50 shadow-sm transition-colors duration-200">
                     <button
                         onClick={() => toggleStep(index)}
-                        className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/80 transition-colors"
+                        className="w-full flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 transition-colors"
                     >
                         <div className="flex items-center gap-3">
                             {isComplete || index < steps.length - 1 ? (
-                                <CheckCircle2 className="w-5 h-5 text-green-500" />
+                                <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-accent" />
+                                </div>
                             ) : (
-                                <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                                <Loader2 className="w-5 h-5 text-accent animate-spin" />
                             )}
-                            <span className="font-medium text-sm text-gray-700 dark:text-gray-200">{step.title}</span>
+                            <span className="font-bold text-sm text-slate-700 dark:text-slate-200">{step.title}</span>
                         </div>
                         {expandedStep === index ? (
-                            <ChevronDown className="w-4 h-4 text-gray-500" />
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
                         ) : (
-                            <ChevronRight className="w-4 h-4 text-gray-500" />
+                            <ChevronRight className="w-4 h-4 text-slate-400" />
                         )}
                     </button>
 
@@ -44,10 +46,15 @@ const ThinkingProcess = ({ steps, isComplete }) => {
                                 exit={{ height: 0, opacity: 0 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                <div className="p-4 bg-white dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-300 prose prose-sm dark:prose-invert max-w-none">
+                                <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300 prose prose-sm dark:prose-invert max-w-none prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:no-underline hover:prose-a:underline">
                                     <ReactMarkdown
                                         remarkPlugins={[remarkMath]}
                                         rehypePlugins={[rehypeKatex]}
+                                        components={{
+                                            a: ({ node, ...props }) => (
+                                                <a {...props} className="text-blue-600 dark:text-blue-400 hover:underline font-medium" target="_blank" rel="noopener noreferrer" />
+                                            )
+                                        }}
                                     >
                                         {String(step.content || '')}
                                     </ReactMarkdown>

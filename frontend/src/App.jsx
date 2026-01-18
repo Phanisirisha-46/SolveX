@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-
-import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Cpu } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Calculator, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -16,13 +15,13 @@ function App() {
   });
 
   // Model State
-  const [selectedModel, setSelectedModel] = useState('groq-llama3.3'); // Default to best
+  const [selectedModel, setSelectedModel] = useState('groq-llama3.3');
 
   const models = [
-    { id: 'groq-llama3.3', name: 'DeepSeek-Math (Llama 3.3)', icon: '🧠' },
+    { id: 'groq-llama3.3', name: 'DeepSeek-Math', icon: '🧠' },
+    { id: 'groq-math-wizard', name: 'Math Wizard', icon: '🧙‍♂️' },
     { id: 'groq-qwen2.5', name: 'Qwen 2.5 Math', icon: '➗' },
     { id: 'groq-llama3.1', name: 'LLaMA 3.1 8B', icon: '⚡' },
-    { id: 'groq-gemma2', name: 'WizardMath (Gemma 2)', icon: '🧙' },
     { id: 'gemini', name: 'Gemini 1.5 Pro', icon: '✨' },
   ];
 
@@ -40,7 +39,6 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSteps, setCurrentSteps] = useState([]); // For thinking process
   const messagesEndRef = useRef(null);
 
   // History State
@@ -56,7 +54,6 @@ function App() {
 
   const startNewChat = () => {
     setMessages([]);
-    setCurrentSteps([]);
     setActiveChatId(Date.now());
   };
 
@@ -93,10 +90,9 @@ function App() {
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
-    setCurrentSteps([]); // Reset steps for new turn
 
     try {
-      const response = await fetch('http://localhost:8000/chat', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -113,7 +109,7 @@ function App() {
       const botMessage = {
         role: 'assistant',
         content: data.response,
-        steps: data.steps // Store steps in message
+        steps: data.steps
       };
 
       const updatedMessages = [...newMessages, botMessage];
@@ -146,76 +142,116 @@ function App() {
       setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I encountered an error. Please try again." }]);
     } finally {
       setIsLoading(false);
-      setCurrentSteps([]);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-sans overflow-hidden transition-colors duration-200">
+    <div className="flex h-screen bg-primary dark:bg-primary-dark transition-colors duration-300 font-sans overflow-hidden">
       {/* Sidebar */}
-      <div className="w-64 bg-white dark:bg-black hidden md:flex flex-col border-r border-gray-200 dark:border-gray-800 transition-colors duration-200">
-        <div className="p-4 flex items-center justify-between border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2">
-            <div className="p-1 bg-black dark:bg-white rounded-full transition-colors duration-200">
-              <Sparkles className="w-4 h-4 text-white dark:text-black fill-current" />
+      <div className="w-[280px] bg-secondary dark:bg-secondary-dark border-r border-slate-200 dark:border-slate-800 hidden md:flex flex-col transition-colors duration-300 z-10">
+        <div className="p-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-accent blur-md opacity-30 rounded-full"></div>
+              <div className="relative p-2 bg-gradient-to-br from-slate-900 to-slate-800 dark:from-white dark:to-slate-200 rounded-xl">
+                <Calculator className="w-5 h-5 text-white dark:text-slate-900" />
+              </div>
             </div>
-            <span className="font-semibold text-lg">SolveX</span>
+            <span className="font-bold text-xl tracking-tight text-slate-800 dark:text-white">SolveX</span>
           </div>
-          <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-lg text-slate-500 hover:bg-white dark:hover:bg-slate-700 hover:shadow-sm transition-all"
+          >
+            {darkMode ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-slate-400" />}
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          <div className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">History</div>
+
+        <div className="px-4 mb-4">
           <button
             onClick={startNewChat}
-            className="w-full flex items-center gap-2 p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-sm text-gray-700 dark:text-gray-300 transition-colors mb-4 border border-gray-200 dark:border-gray-700"
+            className="w-full flex items-center justify-center gap-2 p-3.5 bg-accent hover:bg-accent-hover text-white rounded-xl shadow-lg shadow-blue-500/20 transition-all active:scale-[0.98] font-medium"
           >
             <PlusCircle className="w-4 h-4" />
-            New Chat
+            <span className="text-sm">New Calculation</span>
           </button>
-
-          <div className="space-y-1">
-            {history.map((chat) => (
-              <div
-                key={chat.id}
-                className={`
-                        group flex items-center justify-between p-2 rounded cursor-pointer text-sm transition-colors
-                        ${activeChatId === chat.id
-                    ? 'bg-gray-200 dark:bg-gray-800 text-black dark:text-white font-medium'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400'}
-                    `}
-                onClick={() => loadChat(chat.id)}
-              >
-                <span className="truncate flex-1">{chat.title}</span>
-                <button
-                  onClick={(e) => deleteChat(e, chat.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-opacity"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
-        <div className="p-4 border-t border-gray-200 dark:border-gray-800">
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500"></div>
-            <span>User</span>
+
+        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+          <div className="px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">History</div>
+          {history.map((chat) => (
+            <div
+              key={chat.id}
+              onClick={() => loadChat(chat.id)}
+              className={`
+                group relative flex items-center px-4 py-3 rounded-lg cursor-pointer transition-all duration-200
+                ${activeChatId === chat.id
+                  ? 'bg-white dark:bg-slate-700 shadow-sm'
+                  : 'hover:bg-slate-200/50 dark:hover:bg-slate-800/50'}
+              `}
+            >
+              <div className="flex-1 min-w-0 pr-8">
+                <h3 className={`text-sm font-medium truncate ${activeChatId === chat.id ? 'text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400'}`}>
+                  {chat.title || 'Untitled Calculation'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">{new Date(chat.date).toLocaleDateString()}</p>
+              </div>
+              <button
+                onClick={(e) => deleteChat(e, chat.id)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 rounded-md transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-4 mt-auto border-t border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-400 to-cyan-400 flex items-center justify-center text-white font-bold text-sm shadow-inner">
+              US
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">User Account</span>
+              <span className="text-xs text-slate-400">Pro Plan</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Chat */}
-      <div className="flex-1 flex flex-col h-full relative bg-white dark:bg-gray-800/50 transition-colors duration-200">
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-700 scrollbar-track-transparent">
-          <div className="max-w-3xl mx-auto space-y-6 pb-32">
+      {/* Main Content */}
+      <div className="flex-1 relative flex flex-col h-full overflow-hidden bg-primary dark:bg-primary-dark">
+        {/* Header (Mobile) could go here */}
+
+        {/* Chat Area */}
+        <div className="flex-1 overflow-y-auto scroll-smooth">
+          <div className="w-full max-w-4xl mx-auto px-4 md:px-8 py-8 pb-40">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-                <div className="w-16 h-16 bg-gray-100 dark:bg-white/10 rounded-full flex items-center justify-center mb-4 transition-colors">
-                  <Sparkles className="w-8 h-8 text-black dark:text-white" />
-                </div>
-                <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">How can I help you today?</h2>
+              <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5 }}
+                  className="w-24 h-24 bg-gradient-to-br from-accent/20 to-purple-500/20 rounded-3xl flex items-center justify-center mb-8 backdrop-blur-sm"
+                >
+                  <Sparkles className="w-12 h-12 text-accent" />
+                </motion.div>
+                <motion.h1
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="text-4xl md:text-5xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 via-slate-700 to-slate-900 dark:from-white dark:via-slate-200 dark:to-slate-400 mb-6 tracking-tight"
+                >
+                  What can I solve for you?
+                </motion.h1>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-lg text-slate-500 max-w-lg leading-relaxed"
+                >
+                  Ready to tackle complex math problems, algebraic equations, and step-by-step logic.
+                </motion.p>
               </div>
             ) : (
               <AnimatePresence initial={false}>
@@ -224,58 +260,46 @@ function App() {
                     key={index}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className={`flex gap-6 mb-8 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     {msg.role === 'assistant' && (
-                      <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shrink-0 border border-green-400/20 shadow-lg shadow-green-500/10">
-                        <Sparkles className="w-5 h-5 text-white fill-white" />
+                      <div className="shrink-0 mt-1">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                          <Bot className="w-6 h-6 text-white" />
+                        </div>
                       </div>
                     )}
 
                     <div className={`
-                            relative max-w-[85%] rounded-2xl p-4 text-sm leading-relaxed shadow-sm
-                            ${msg.role === 'user'
-                        ? 'bg-gray-100 dark:bg-[#2f2f2f] text-gray-800 dark:text-white'
-                        : 'bg-white dark:bg-transparent text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-none'}
-                        `}>
+                      relative max-w-[85%] md:max-w-[75%] 
+                      ${msg.role === 'user' ? 'bg-accent text-white shadow-xl shadow-blue-500/10 rounded-[2rem] rounded-tr-md px-6 py-4' : 'w-full'}
+                    `}>
                       {msg.role === 'assistant' ? (
-                        <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <div className="space-y-4">
                           {msg.steps && msg.steps.length > 0 && (
                             <ThinkingProcess steps={msg.steps} isComplete={true} />
                           )}
-                          <ReactMarkdown
-                            remarkPlugins={[remarkMath]}
-                            rehypePlugins={[rehypeKatex]}
-                          >
-                            {String(msg.content || '')}
-                          </ReactMarkdown>
+                          <div className="prose prose-lg dark:prose-invert max-w-none text-slate-700 dark:text-slate-200 leading-relaxed font-light">
+                            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
                         </div>
                       ) : (
-                        msg.content
+                        <p className="text-[15px] leading-relaxed font-medium">{msg.content}</p>
                       )}
                     </div>
-
-                    {msg.role === 'user' && (
-                      <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center shrink-0">
-                        <User className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-                      </div>
-                    )}
                   </motion.div>
                 ))}
 
                 {isLoading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-4 justify-start"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center shrink-0 animate-pulse">
-                      <Sparkles className="w-5 h-5 text-white" />
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-6">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                      <Loader2 className="w-5 h-5 text-white animate-spin" />
                     </div>
-                    <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm pt-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Thinking...
+                    <div className="flex items-center gap-2 text-slate-400 text-sm font-medium pt-2">
+                      <span>Analyzing problem matches...</span>
                     </div>
                   </motion.div>
                 )}
@@ -285,49 +309,53 @@ function App() {
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-gray-50 via-gray-50 dark:from-gray-900 dark:via-gray-900 to-transparent pt-10 pb-6 px-4 transition-colors duration-200">
-          <div className="max-w-3xl mx-auto space-y-3">
-            {/* Model Selector */}
-            <div className="flex justify-center">
-              <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1">
-                {models.map(model => (
-                  <button
-                    key={model.id}
-                    onClick={() => setSelectedModel(model.id)}
-                    className={`
-                                px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1.5
-                                ${selectedModel === model.id
-                        ? 'bg-white dark:bg-gray-700 text-black dark:text-white shadow-sm'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}
-                            `}
-                  >
-                    <span>{model.icon}</span>
-                    <span className="hidden sm:inline">{model.name}</span>
-                  </button>
-                ))}
-              </div>
+        {/* Input Area - Floating Capsule */}
+        <div className="absolute bottom-6 left-0 right-0 px-4">
+          <div className="max-w-3xl mx-auto">
+            {/* Model Pills */}
+            <div className="flex justify-center mb-4 gap-2">
+              {models.map(model => (
+                <button
+                  key={model.id}
+                  onClick={() => setSelectedModel(model.id)}
+                  className={`
+                      px-4 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md transition-all border
+                      ${selectedModel === model.id
+                      ? 'bg-accent/10 border-accent/20 text-accent shadow-sm'
+                      : 'bg-white/50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-white/80'}
+                    `}
+                >
+                  <span className="mr-1.5">{model.icon}</span>
+                  {model.name}
+                </button>
+              ))}
             </div>
 
             <form onSubmit={handleSubmit} className="relative group">
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Message SolveX..."
-                disabled={isLoading}
-                className="w-full bg-white dark:bg-[#2f2f2f] text-gray-900 dark:text-white rounded-xl pl-4 pr-12 py-3.5 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:focus:ring-gray-500 shadow-lg dark:shadow-xl placeholder-gray-500 dark:placeholder-gray-400 transition-all border border-gray-200 dark:border-transparent focus:border-gray-400 dark:focus:border-gray-600"
-              />
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-black dark:bg-white disabled:bg-gray-300 dark:disabled:bg-gray-500 disabled:opacity-50 transition-all hover:opacity-90 active:scale-95"
-              >
-                <Send className="w-4 h-4 text-white dark:text-black" />
-              </button>
+              <div className="relative flex items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl shadow-slate-200/50 dark:shadow-black/50 transition-all focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent/50 overflow-hidden">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask any math question..."
+                  disabled={isLoading}
+                  className="w-full bg-transparent text-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 px-6 py-4 focus:outline-none"
+                />
+                <div className="pr-3">
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || isLoading}
+                    className="p-3 rounded-2xl bg-accent hover:bg-accent-hover text-white disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:opacity-50 transition-all active:scale-95 shadow-lg shadow-blue-500/30"
+                  >
+                    <Send className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
             </form>
-            <div className="text-center text-xs text-gray-500 mt-2">
-              SolveX can make mistakes. Consider checking important information.
+            <div className="text-center mt-3">
+              <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase opacity-60">
+                Powered by SolveX Engine • LateX Support Enabled
+              </p>
             </div>
           </div>
         </div>
