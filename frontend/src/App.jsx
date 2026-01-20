@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Calculator, ChevronRight } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Calculator, ChevronRight, Brain, Zap, Box, Star, Image } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -8,6 +8,22 @@ import 'katex/dist/katex.min.css';
 import ThinkingProcess from './components/ThinkingProcess';
 
 function App() {
+  // Access Control State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const [authError, setAuthError] = useState(false);
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (passcode.toLowerCase() === "rabbit") {
+      setIsAuthenticated(true);
+      setAuthError(false);
+    } else {
+      setAuthError(true);
+      setTimeout(() => setAuthError(false), 2000);
+    }
+  };
+
   // Theme State
   const [darkMode, setDarkMode] = useState(() => {
     if (window.matchMedia('(prefers-color-scheme: dark)').matches) return true;
@@ -18,11 +34,11 @@ function App() {
   const [selectedModel, setSelectedModel] = useState('groq-llama3.3');
 
   const models = [
-    { id: 'groq-llama3.3', name: 'DeepSeek-Math', icon: '🧠' },
-    { id: 'groq-math-wizard', name: 'Math Wizard', icon: '🧙‍♂️' },
-    { id: 'groq-qwen2.5', name: 'Qwen 2.5 Math', icon: '➗' },
-    { id: 'groq-llama3.1', name: 'LLaMA 3.1 8B', icon: '⚡' },
-    { id: 'gemini', name: 'Gemini 1.5 Pro', icon: '✨' },
+    { id: 'groq-llama3.3', name: 'LLaMA-3.3-70B', icon: <Brain className="w-3.5 h-3.5" /> },
+    { id: 'groq-qwen2.5', name: 'Qwen-2.5-32B', icon: <Calculator className="w-3.5 h-3.5" /> },
+    { id: 'groq-math-wizard', name: 'Gemma-2-9B', icon: <Sparkles className="w-3.5 h-3.5" /> },
+    { id: 'groq-llama3.1', name: 'LLaMA-3.1-8B', icon: <Zap className="w-3.5 h-3.5" /> },
+    { id: 'gemini', name: 'Gemini', icon: <Star className="w-3.5 h-3.5" /> },
   ];
 
   useEffect(() => {
@@ -40,6 +56,55 @@ function App() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // Image State
+  const [selectedImage, setSelectedImage] = useState(null); // Data URL for preview
+  const [selectedImageFile, setSelectedImageFile] = useState(null); // Base64 for sending
+  const fileInputRef = useRef(null);
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      // 1. Create an image to load the file
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+
+      img.onload = () => {
+        // 2. Calculate new size (max width 600px - aggressive for mobile/Vercel)
+        const maxWidth = 600;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        // 3. Draw to canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // 4. Get compressed Base64
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // 50% quality
+
+        setSelectedImage(dataUrl);
+        // Extract base64 part only
+        const base64String = dataUrl.split(',')[1];
+        setSelectedImageFile(base64String);
+
+        // Clean up
+        URL.revokeObjectURL(img.src);
+      };
+
+      img.onerror = () => {
+        console.error("Failed to load image for resizing");
+        alert("Failed to process image. Please try another one.");
+      };
+    }
+  };
 
   // History State
   const [history, setHistory] = useState(() => {
@@ -85,21 +150,35 @@ function App() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
-    const userMessage = { role: 'user', content: input };
+    const userMessage = {
+      role: 'user',
+      content: input,
+      image: selectedImage // Add image to local state for rendering
+    };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
     setIsLoading(true);
 
     try {
+      console.log("Sending payload...", {
+        model: selectedModel,
+        hasImage: !!selectedImageFile
+      });
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input_text: userMessage.content,
-          model_provider: selectedModel
+          input_text: userMessage.content || "Analyze this image",
+          model_provider: selectedModel,
+          image_data: selectedImageFile
         }),
       });
+
+      // Reset image after sending
+      setSelectedImage(null);
+      setSelectedImageFile(null);
 
       if (!response.ok) {
         throw new Error(`Error: ${response.status}`);
@@ -144,6 +223,69 @@ function App() {
       setIsLoading(false);
     }
   };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-slate-50 dark:bg-slate-900 overflow-hidden relative">
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-purple-500/20 rounded-full blur-[100px]" />
+          <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-blue-500/20 rounded-full blur-[120px]" />
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="relative z-10 w-full max-w-md p-8"
+        >
+          <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/50 dark:border-slate-700/50 p-8 flex flex-col items-center">
+
+            <div className="w-16 h-16 mb-6 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
+              <Sparkles className="w-8 h-8 text-white" />
+            </div>
+
+            <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 mb-2">
+              SolveX Access
+            </h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-8 text-center">
+              Please enter the access code to continue.
+            </p>
+
+            <form onSubmit={handleLogin} className="w-full space-y-4">
+              <div className="relative">
+                <input
+                  type="password"
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
+                  placeholder="Enter code"
+                  className={`
+                    w-full px-5 py-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border outline-none transition-all
+                    ${authError
+                      ? 'border-red-500 ring-2 ring-red-500/20 text-red-500'
+                      : 'border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-slate-900 dark:text-white'}
+                  `}
+                />
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                type="submit"
+                className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 text-white font-semibold shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 transition-shadow"
+              >
+                Access System
+              </motion.button>
+            </form>
+
+            <div className="mt-6 flex items-center gap-2 text-xs text-slate-400 uppercase tracking-widest font-semibold">
+              <Box className="w-3 h-3" />
+              <span>Protected Environment</span>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-primary dark:bg-primary-dark transition-colors duration-300 font-sans overflow-hidden">
@@ -287,7 +429,12 @@ function App() {
                           </div>
                         </div>
                       ) : (
-                        <p className="text-[15px] leading-relaxed font-medium">{msg.content}</p>
+                        <div className="flex flex-col gap-2">
+                          {msg.image && (
+                            <img src={msg.image} alt="User upload" className="max-w-full rounded-lg border border-white/20" />
+                          )}
+                          <p className="text-[15px] leading-relaxed font-medium">{msg.content}</p>
+                        </div>
                       )}
                     </div>
                   </motion.div>
@@ -332,29 +479,65 @@ function App() {
             </div>
 
             <form onSubmit={handleSubmit} className="relative group">
-              <div className="relative flex items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl shadow-slate-200/50 dark:shadow-black/50 transition-all focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent/50 overflow-hidden">
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask any math question..."
-                  disabled={isLoading}
-                  className="w-full bg-transparent text-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 px-6 py-4 focus:outline-none"
-                />
-                <div className="pr-3">
+              <div className="relative flex flex-col bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-3xl shadow-2xl shadow-slate-200/50 dark:shadow-black/50 transition-all focus-within:ring-2 focus-within:ring-accent/20 focus-within:border-accent/50 overflow-hidden">
+
+                {/* Image Preview */}
+                {selectedImage && (
+                  <div className="px-4 pt-4 pb-2 flex items-center gap-3">
+                    <div className="relative group/image">
+                      <img src={selectedImage} alt="Upload preview" className="h-16 w-auto rounded-xl border border-slate-300 dark:border-slate-600 shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedImage(null); setSelectedImageFile(null); }}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover/image:opacity-100 transition-opacity shadow-md"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Image attached</span>
+                  </div>
+                )}
+
+                <div className="flex items-center">
                   <button
-                    type="submit"
-                    disabled={!input.trim() || isLoading}
-                    className="p-3 rounded-2xl bg-accent hover:bg-accent-hover text-white disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:opacity-50 transition-all active:scale-95 shadow-lg shadow-blue-500/30"
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="pl-4 text-slate-400 hover:text-accent transition-colors"
+                    title="Upload Image"
                   >
-                    <Send className="w-5 h-5" />
+                    <Image className="w-5 h-5" />
                   </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  <input
+                    type="text"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder={selectedImage ? "Add context about this image..." : "Ask any math question..."}
+                    disabled={isLoading}
+                    className="w-full bg-transparent text-lg text-slate-800 dark:text-slate-100 placeholder-slate-400 px-4 py-4 focus:outline-none"
+                  />
+                  <div className="pr-3">
+                    <button
+                      type="submit"
+                      disabled={(!input.trim() && !selectedImage) || isLoading}
+                      className="p-3 rounded-2xl bg-accent hover:bg-accent-hover text-white disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:opacity-50 transition-all active:scale-95 shadow-lg shadow-blue-500/30"
+                    >
+                      <Send className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </form>
             <div className="text-center mt-3">
               <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase opacity-60">
-                Powered by SolveX Engine • LateX Support Enabled
+                Powered by SolveX Engine • Copyrights 2026
               </p>
             </div>
           </div>

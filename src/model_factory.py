@@ -46,3 +46,19 @@ class LLMFactory:
             )
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
+
+    @staticmethod
+    def get_vision_model():
+        """Returns a Gemini 1.5 Flash model for Vision"""
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        import os
+    @staticmethod
+    def get_vision_model():
+        """Returns a Gemini Flash model for Vision"""
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        import os
+        return ChatGoogleGenerativeAI(
+            model="gemini-flash-latest",
+            google_api_key=os.environ.get("GOOGLE_API_KEY"),
+            temperature=0
+        )

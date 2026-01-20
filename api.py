@@ -44,12 +44,21 @@ class ChatRequest(BaseModel):
     input_text: str
     model_provider: str = "groq"
     model_name: str | None = None
+    image_data: str | None = None # Base64 string
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
         print(f"Received request: {request.input_text} using {request.model_provider}")
-        inputs = {"input_text": request.input_text}
+        if request.image_data:
+            print(f"Image Data Received. Size: {len(request.image_data)} chars")
+        else:
+            print("No Image Data Received.")
+            
+        inputs = {
+            "input_text": request.input_text,
+            "image_data": request.image_data
+        }
         
         # Pass model config to the graph
         config = {
@@ -73,7 +82,18 @@ async def chat(request: ChatRequest):
                     "expanded": False
                 }
                 
-                if node_name == "classify":
+                if node_name == "analyze_image":
+                    if request.image_data:
+                        step_info["title"] = "Analyzing Image"
+                        step_info["content"] = "Image content successfully extracted."
+                    else:
+                        continue # Hide step if no image was actually processed
+                elif node_name == "classify":
+                    ptype = state.get('problem_type', 'Unknown').lower()
+                    # Hide classification step if it triggered a guardrail
+                    if "greeting" in ptype or "irrelevant" in ptype or "incomplete" in ptype:
+                        continue
+                    
                     step_info["title"] = "Classifying Problem"
                     step_info["content"] = f"Identified as: **{state.get('problem_type', 'Unknown')}**"
                 elif node_name == "real_world":
@@ -91,6 +111,10 @@ async def chat(request: ChatRequest):
                 elif node_name == "explain":
                     final_explanation = state.get('explanation', "No explanation.")
                     continue # specific handling for final output vs steps
+                elif node_name == "guardrail":
+                    # For guardrails, set the explanation and skip adding a timeline step
+                    final_explanation = state.get('explanation', "I cannot answer this.")
+                    continue
                 elif node_name == "practice":
                     # Practice problems are usually returned as the final "answer" or appended.
                     # Let's append them to the final explanation or return as a step?
@@ -143,6 +167,21 @@ async def get_chats():
         return {"chats": [point.payload for point in result]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/test-vision")
+async def test_vision():
+    try:
+        if not os.getenv("GROQ_API_KEY"):
+            return {"status": "error", "message": "GROQ_API_KEY missing"}
+            
+        from src.model_factory import LLMFactory
+        # Just try to instantiate, don't invoke to save cost/latency
+        llm = LLMFactory.get_vision_model()
+        return {"status": "ok", "message": "Vision model loaded", "model_type": str(type(llm))}
+        
+    except Exception as e:
+        import traceback
+        return {"status": "error", "message": str(e), "trace": traceback.format_exc()}
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

@@ -9,3 +9,5 @@ fastapi
 uvicorn
 langchain-groq
 qdrant-client
+groq
+httpx

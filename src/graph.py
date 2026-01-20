@@ -13,6 +13,7 @@ class AgentState(TypedDict):
     explanation: str
     practice_problems: List[str]
     references: List[str]
+    image_data: str | None # Base64 encoded image
 
 # Helper to get LLM from config
 def get_llm_from_config(config):
@@ -23,12 +24,79 @@ def get_llm_from_config(config):
     )
 
 # Nodes
+def analyze_image(state: AgentState, config):
+    print("---ANALYZING IMAGE---")
+    if not state.get("image_data"):
+        print("No image data found, skipping vision analysis")
+        return {"input_text": state["input_text"]}
+    
+    # Use dedicated vision model
+    # Vision Model (Gemini) does not strictly require GROQ_KEY check here.
+    # Factory handles specific checks.
+
+    try:
+        vision_llm = LLMFactory.get_vision_model()
+    except Exception as e:
+        return {"input_text": state["input_text"] + f"\n[System Error: Failed to load vision model: {e}]"}
+
+    # Parse image data
+    image_data = state['image_data']
+    if "data:image" not in image_data:
+        image_url = f"data:image/jpeg;base64,{image_data}"
+    else:
+        image_url = image_data
+
+    message = HumanMessage(
+        content=[
+            {"type": "text", "text": "Analyze this image and extract the math problem exactly. If it involves geometry or trigonometry, describe the diagram properties (angles, lengths) clearly. Output standard plain text for equations (e.g., 'x^2', '1/2'). Do NOT use LaTeX or backslashes. Return ONLY the math problem statement, no conversational filler."},
+            {"type": "image_url", "image_url": {"url": image_url}} 
+        ]
+    )
+    
+    try:
+        response = vision_llm.invoke([message])
+        print(f"Vision output: {response.content}")
+        # Append extracted text to user input or replace it? 
+        # Replacing is better if the user just uploaded an image.
+        # If user typed text + image, maybe combine? Let's replace for now as "Solved X from image"
+        return {"input_text": response.content}
+    except Exception as e:
+        print(f"Vision Error: {e}")
+        return {"input_text": state["input_text"]} # Fallback
+
 def classify_problem(state: AgentState, config):
     print("---CLASSIFYING PROBLEM---")
     llm = get_llm_from_config(config)
-    prompt = f"Classify the following math problem into a category (e.g., Motion, Geometry, Algebra): {state['input_text']}. Return only the category name."
+    prompt = f"""
+    Classify the user input: "{state['input_text']}" into one of the following categories:
+    1. A Math Problem (e.g., Algebra, Geometry, Calculus, Motion).
+    2. "Greeting" (e.g., hi, hello).
+    3. "Irrelevant" (e.g., general chat, non-math question).
+    4. "Incomplete" (e.g., "Find x" with no context).
+
+    Return ONLY the category name. If it is Math, return the specific math type (e.g., "Algebra").
+    """
     response = llm.invoke([HumanMessage(content=prompt)])
     return {"problem_type": response.content.strip()}
+
+def handle_irrelevant_input(state: AgentState, config):
+    print("---HANDLING IRRELEVANT INPUT---")
+    # Strict Guardrail Response
+    ptype = state.get("problem_type", "").lower()
+    
+    if "incomplete" in ptype:
+        msg = "**Incomplete Data:** I am here to solve math problems, but I need more information to solve this one. Please provide the full equation or context."
+    else:
+        msg = "**Math Only:** Hello! I am here to solve ONLY math problems. I cannot help with greetings, general chat, or non-math topics. Please copy-paste a valid math problem or upload an image."
+
+    return {
+        "solution": "N/A", 
+        "explanation": msg,
+        "real_world_context": "N/A",
+        "equations": [],
+        "practice_problems": [],
+        "references": []
+    }
 
 def generate_real_world_context(state: AgentState, config):
     print("---GENERATING CONTEXT---")
@@ -50,7 +118,7 @@ def solve_equations(state: AgentState, config):
     print("---SOLVING EQUATIONS---")
     llm = get_llm_from_config(config)
     # STRICT BOLDING INSTRUCTION
-    prompt = f"Solve these equations step-by-step: {state.get('equations')}. **CRITICAL**: You MUST use bold formatting for EVERY step number (e.g., '**Step 1:**', '**Step 2:**'). Do not use plain text for step headers. Return the final solution."
+    prompt = f"Solve these equations step-by-step: {state.get('equations')}. **CRITICAL**: 1. You MUST use bold formatting for EVERY step number (e.g., '**Step 1:**'). 2. Output simple plain text math (e.g., '1/3', 'x^2'). Do NOT use LaTeX (no `\\frac`, `\\times`, etc.). Return the final solution."
     response = llm.invoke([HumanMessage(content=prompt)])
     
     # Force bolding via Regex
@@ -64,7 +132,7 @@ def generate_explanation(state: AgentState, config):
     print("---GENERATING EXPLANATION---")
     llm = get_llm_from_config(config)
     # STRICT BOLDING INSTRUCTION
-    prompt = f"Provide a clear, step-by-step explanation for the solution: {state['solution']}, given the original problem: {state['input_text']}. **CRITICAL**: Format every step header in BOLD (e.g., '**Step 1:**', '**Step 2:**')."
+    prompt = f"Provide a clear, step-by-step explanation for the solution: {state['solution']}, given the original problem: {state['input_text']}. **CRITICAL**: 1. Format every step header in BOLD (e.g., '**Step 1:**'). 2. Use clean, plain text for math (e.g., '30 * 1/3 = 10'). Do NOT use LaTeX formatting."
     response = llm.invoke([HumanMessage(content=prompt)])
     
     # Force bolding via Regex
@@ -100,6 +168,7 @@ def generate_resources(state: AgentState, config):
 # Graph Construction
 workflow = StateGraph(AgentState)
 
+workflow.add_node("analyze_image", analyze_image)
 workflow.add_node("classify", classify_problem)
 workflow.add_node("real_world", generate_real_world_context)
 workflow.add_node("extract", extract_equations)
@@ -108,9 +177,28 @@ workflow.add_node("explain", generate_explanation)
 workflow.add_node("practice", generate_practice)
 workflow.add_node("resources", generate_resources)
 
-workflow.set_entry_point("classify")
+workflow.add_node("guardrail", handle_irrelevant_input)
 
-workflow.add_edge("classify", "real_world")
+workflow.set_entry_point("analyze_image")
+
+def route_based_on_classification(state: AgentState):
+    ptype = state.get("problem_type", "").lower()
+    # Check for non-math keywords
+    if "greeting" in ptype or "irrelevant" in ptype or "incomplete" in ptype:
+        return "guardrail"
+    return "real_world"
+
+workflow.add_edge("analyze_image", "classify")
+workflow.add_conditional_edges(
+    "classify",
+    route_based_on_classification,
+    {
+        "real_world": "real_world",
+        "guardrail": "guardrail"
+    }
+)
+workflow.add_edge("guardrail", END)
+
 workflow.add_edge("real_world", "extract")
 workflow.add_edge("extract", "solve")
 workflow.add_edge("solve", "explain")
