@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Calculator, ChevronRight, Brain, Zap, Box, Star, Image, ShieldCheck, Cpu, Lock as LockIcon, Mic, MicOff, BarChart3, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import useSound from 'use-sound';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -15,10 +14,7 @@ function App() {
   const [passcode, setPasscode] = useState("");
   const [authError, setAuthError] = useState(false);
 
-  // Sound Hooks
-  const [playPop] = useSound('https://github.com/joshwcomeau/use-sound/blob/master/stories/sounds/pop.mp3?raw=true', { volume: 0.5 });
-  const [playClick] = useSound('https://github.com/joshwcomeau/use-sound/blob/master/stories/sounds/glug-a.mp3?raw=true', { volume: 0.5 });
-  const [playSuccess] = useSound('https://github.com/joshwcomeau/use-sound/blob/master/stories/sounds/success.mp3?raw=true', { volume: 0.4 });
+
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -122,7 +118,7 @@ function App() {
   // Save metrics on change (removed localStorage, now purely backend sync)
   useEffect(() => {
     // Initial fetch from backend
-    fetch('http://localhost:8000/api/stats')
+    fetch('/api/stats')
       .then(res => res.json())
       .then(data => {
         if (data && Object.keys(data).length > 0) {
@@ -158,7 +154,7 @@ function App() {
     };
 
     // Fire and forget
-    fetch('http://localhost:8000/api/stats/vote', {
+    fetch('/api/stats/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -166,7 +162,6 @@ function App() {
   };
 
   const handleVote = (index, isUpvote) => {
-    playClick();
     // 1. Update Active Messages
     setMessages(prev => {
       const newMessages = [...prev];
@@ -292,7 +287,6 @@ function App() {
   }, [history]);
 
   const startNewChat = () => {
-    playClick();
     setMessages([]);
     setActiveChatId(Date.now());
   };
@@ -340,7 +334,7 @@ function App() {
       category: 'Other'     // Default category, updated via stream
     };
 
-    playPop();
+
     const newMessages = [...messages, userMessage, initialBotMessage];
     setMessages(newMessages);
 
@@ -409,7 +403,9 @@ function App() {
           });
         } else if (isStreamingDone) {
           clearInterval(streamInterval);
-          playSuccess(); // Chime when done
+          clearInterval(streamInterval);
+
+          // Final History Update
 
           // Final History Update
           const chatId = activeChatId || Date.now();
@@ -849,7 +845,7 @@ function App() {
 
         <div className="p-4 mt-auto border-t border-slate-200 dark:border-slate-800 space-y-2">
           <button
-            onClick={() => { playClick(); setIsMetricsOpen(true); }}
+            onClick={() => { setIsMetricsOpen(true); }}
             className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors text-left text-slate-600 dark:text-slate-400 hover:text-accent"
           >
             <BarChart3 className="w-5 h-5" />
@@ -857,7 +853,7 @@ function App() {
           </button>
 
           <button
-            onClick={() => { playClick(); openProfile(); }}
+            onClick={() => { openProfile(); }}
             className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/50 cursor-pointer transition-colors text-left"
           >
             <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-inner transition-colors ${userRole === 'Admin' ? 'bg-gradient-to-tr from-amber-500 to-red-500' : 'bg-gradient-to-tr from-indigo-400 to-cyan-400'}`}>

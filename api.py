@@ -7,9 +7,7 @@ import sys
 import uvicorn
 import os
 
-# Set encoding for Windows console
-sys.stdout.reconfigure(encoding='utf-8')
-sys.stderr.reconfigure(encoding='utf-8')
+
 
 from dotenv import load_dotenv
 load_dotenv()

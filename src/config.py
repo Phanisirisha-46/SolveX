@@ -1,20 +1,17 @@
 import os
-from pydantic_settings import BaseSettings
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-class Settings(BaseSettings):
-    GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY")
-    GROQ_API_KEY: str | None = os.getenv("GROQ_API_KEY")
-    DEFAULT_LLM: str = os.getenv("DEFAULT_LLM", "groq").lower()
-    QDRANT_URL: str | None = os.getenv("QDRANT_URL")
-    QDRANT_API_KEY: str | None = os.getenv("QDRANT_API_KEY")
-    OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
-    ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY")
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+class Settings:
+    def __init__(self):
+        self.GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+        self.GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+        self.DEFAULT_LLM = os.getenv("DEFAULT_LLM", "groq").lower()
+        self.QDRANT_URL = os.getenv("QDRANT_URL")
+        self.QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+        self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 settings = Settings()

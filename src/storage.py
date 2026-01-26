@@ -2,8 +2,13 @@ import os
 import time
 import uuid
 from typing import Dict, Any, Optional
-from qdrant_client import QdrantClient
-from qdrant_client.http import models
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.http import models
+    HAS_QDRANT = True
+except ImportError:
+    HAS_QDRANT = False
+    print("WARNING: 'qdrant-client' not installed. Persistence disabled.")
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from dotenv import load_dotenv
 
@@ -16,6 +21,9 @@ _votes_collection_name = "votes"
 
 def get_qdrant_client():
     global _client
+    if not HAS_QDRANT:
+        return None
+        
     if _client is None:
         url = os.getenv("QDRANT_URL")
         api_key = os.getenv("QDRANT_API_KEY")
