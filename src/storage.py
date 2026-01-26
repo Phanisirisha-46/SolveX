@@ -26,9 +26,12 @@ def get_qdrant_client():
             
         try:
             # Short timeout to prevent hanging the chat if DB is down
-            _client = QdrantClient(url=url, api_key=api_key, timeout=2.0) 
+            _client = QdrantClient(url=url, api_key=api_key, timeout=2.0)
+            # Verify connection
+            _client.get_collections()
         except Exception as e:
-            print(f"Failed to connect to Qdrant: {e}")
+            print(f"WARNING: Qdrant Connection Failed. Persistence Disabled (Cloud Mode). Error: {e}")
+            _client = None
             return None
     return _client
 
