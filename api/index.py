@@ -1,10 +1,4 @@
-import sys
-import os
-
-# Add project root to path to allow imports from src
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from api import app
 
-# Vercel needs 'app' to be exposed
-# Force Rebuild 1
+# This file is the entry point for Vercel Serverless Functions.
+# It simply imports the FastAPI 'app' object from the root 'api.py'.
