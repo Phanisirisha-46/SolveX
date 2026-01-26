@@ -24,6 +24,14 @@ def get_llm_from_config(config):
     )
 
 # Nodes
+# Helper to clean LLM response (remove <think> blocks)
+import re
+def clean_content(text: str) -> str:
+    # Remove <think>...</think> blocks including newlines
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    return text.strip()
+
+# Nodes
 def analyze_image(state: AgentState, config):
     print("---ANALYZING IMAGE---")
     if not state.get("image_data"):
@@ -56,10 +64,7 @@ def analyze_image(state: AgentState, config):
     try:
         response = vision_llm.invoke([message])
         print(f"Vision output: {response.content}")
-        # Append extracted text to user input or replace it? 
-        # Replacing is better if the user just uploaded an image.
-        # If user typed text + image, maybe combine? Let's replace for now as "Solved X from image"
-        return {"input_text": response.content}
+        return {"input_text": clean_content(response.content)}
     except Exception as e:
         print(f"Vision Error: {e}")
         return {"input_text": state["input_text"]} # Fallback
@@ -68,16 +73,33 @@ def classify_problem(state: AgentState, config):
     print("---CLASSIFYING PROBLEM---")
     llm = get_llm_from_config(config)
     prompt = f"""
-    Classify the user input: "{state['input_text']}" into one of the following categories:
-    1. A Math Problem (e.g., Algebra, Geometry, Calculus, Motion).
-    2. "Greeting" (e.g., hi, hello).
-    3. "Irrelevant" (e.g., general chat, non-math question).
-    4. "Incomplete" (e.g., "Find x" with no context).
+    Classify the user input: "{state['input_text']}" into exactly ONE of the following.
+    
+    PRIORITY CATEGORIES (Check these first):
+    1. "Sum and Difference"
+    2. "Item and Property"
+    3. "Motions"
+    4. "Mixtures"
+    5. "Perimeter of Rectangle"
+    
+    If the input is a valid math problem but does NOT fit the above 5, classify it by its specific field, such as:
+    - "Algebra"
+    - "Trigonometry"
+    - "Calculus"
+    - "Geometry"
+    - "Arithmetic"
+    - "Probability"
+    - etc.
+    
+    If the input is NOT a math problem, classify as:
+    - "Greeting" (e.g., hi, hello)
+    - "Irrelevant" (e.g., general chat, non-math question)
+    - "Incomplete" (e.g., "Find x" with no context)
 
-    Return ONLY the category name. If it is Math, return the specific math type (e.g., "Algebra").
+    Return ONLY the category name. Do not add explanations.
     """
     response = llm.invoke([HumanMessage(content=prompt)])
-    return {"problem_type": response.content.strip()}
+    return {"problem_type": clean_content(response.content)}
 
 def handle_irrelevant_input(state: AgentState, config):
     print("---HANDLING IRRELEVANT INPUT---")
@@ -103,14 +125,14 @@ def generate_real_world_context(state: AgentState, config):
     llm = get_llm_from_config(config)
     prompt = f"Explain this math problem using a simple real-life example or analogy to help a student understand the concept: {state['input_text']}"
     response = llm.invoke([HumanMessage(content=prompt)])
-    return {"real_world_context": response.content}
+    return {"real_world_context": clean_content(response.content)}
 
 def extract_equations(state: AgentState, config):
     print("---EXTRACTING EQUATIONS---")
     llm = get_llm_from_config(config)
     prompt = f"Extract variables and equations from this {state['problem_type']} problem: {state['input_text']}. Return them as a python list of strings."
     response = llm.invoke([HumanMessage(content=prompt)])
-    return {"equations": [response.content]} 
+    return {"equations": [clean_content(response.content)]} 
 
 import re
 
@@ -122,7 +144,7 @@ def solve_equations(state: AgentState, config):
     response = llm.invoke([HumanMessage(content=prompt)])
     
     # Force bolding via Regex
-    content = response.content
+    content = clean_content(response.content)
     content = re.sub(r'(?m)^(Step \d+:?)', r'**\1**', content) # Matches "Step 1:" at start of line
     content = re.sub(r'\*\*(Step \d+:?)\*\*', r'**\1**', content) # Avoid double bolding if LLM did it right
     
@@ -136,7 +158,7 @@ def generate_explanation(state: AgentState, config):
     response = llm.invoke([HumanMessage(content=prompt)])
     
     # Force bolding via Regex
-    content = response.content
+    content = clean_content(response.content)
     content = re.sub(r'(?m)^(Step \d+:?)', r'**\1**', content)
     content = re.sub(r'\*\*(Step \d+:?)\*\*', r'**\1**', content) # Fix double bolding
     
@@ -147,7 +169,8 @@ def generate_practice(state: AgentState, config):
     llm = get_llm_from_config(config)
     prompt = f"Generate 2 similar practice problems based on the concept of {state['problem_type']} and the original problem: {state['input_text']}. Return them as a numbered list."
     response = llm.invoke([HumanMessage(content=prompt)])
-    problems = response.content.split("\n")
+    content = clean_content(response.content)
+    problems = content.split("\n")
     return {"practice_problems": [p for p in problems if p.strip()]}
 
 def generate_resources(state: AgentState, config):
@@ -163,7 +186,7 @@ def generate_resources(state: AgentState, config):
     Do not invent fake VIDEO IDs. Use the search query format to ensure links work.
     """
     response = llm.invoke([HumanMessage(content=prompt)])
-    return {"references": [response.content]}
+    return {"references": [clean_content(response.content)]}
 
 # Graph Construction
 workflow = StateGraph(AgentState)

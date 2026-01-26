@@ -46,113 +46,133 @@ class ChatRequest(BaseModel):
     model_name: str | None = None
     image_data: str | None = None # Base64 string
 
+from fastapi.responses import StreamingResponse
+import json
+
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    try:
-        print(f"Received request: {request.input_text} using {request.model_provider}")
-        if request.image_data:
-            print(f"Image Data Received. Size: {len(request.image_data)} chars")
-        else:
-            print("No Image Data Received.")
-            
-        inputs = {
-            "input_text": request.input_text,
-            "image_data": request.image_data
+    print(f"Received request: {request.input_text} using {request.model_provider}")
+    
+    inputs = {
+        "input_text": request.input_text,
+        "image_data": request.image_data
+    }
+    
+    config = {
+        "configurable": {
+            "model_provider": request.model_provider,
+            "model_name": request.model_name
         }
+    }
+
+    async def event_generator():
+        final_answer_accumulator = ""
         
-        # Pass model config to the graph
-        config = {
-            "configurable": {
-                "model_provider": request.model_provider,
-                "model_name": request.model_name
-            }
-        }
-        
-        steps = []
-        final_explanation = "No explanation generated."
-        
-        # Stream events to capture intermediate node outputs
-        for output in graph_app.stream(inputs, config=config):
-            for node_name, state in output.items():
-                print(f"Node {node_name} finished.")
-                
-                step_info = {
-                    "title": node_name.capitalize(),
-                    "content": "",
-                    "expanded": False
-                }
-                
-                if node_name == "analyze_image":
-                    if request.image_data:
-                        step_info["title"] = "Analyzing Image"
-                        step_info["content"] = "Image content successfully extracted."
-                    else:
-                        continue # Hide step if no image was actually processed
-                elif node_name == "classify":
-                    ptype = state.get('problem_type', 'Unknown').lower()
-                    # Hide classification step if it triggered a guardrail
-                    if "greeting" in ptype or "irrelevant" in ptype or "incomplete" in ptype:
-                        continue
-                    
-                    step_info["title"] = "Classifying Problem"
-                    step_info["content"] = f"Identified as: **{state.get('problem_type', 'Unknown')}**"
-                elif node_name == "real_world":
-                    step_info["title"] = "Real World Context"
-                    step_info["content"] = state.get('real_world_context', '')
-                elif node_name == "extract":
-                    step_info["title"] = "Extracting Equations"
-                    equations = state.get('equations', [])
-                    # Formatting list for markdown display
-                    eq_str = "\n".join([f"- {eq}" for eq in equations])
-                    step_info["content"] = f"Extracted:\n{eq_str}"
-                elif node_name == "solve":
-                    step_info["title"] = "Solving Equations"
-                    step_info["content"] = f"Solution found: {state.get('solution', 'N/A')}"
-                elif node_name == "explain":
-                    final_explanation = state.get('explanation', "No explanation.")
-                    continue # specific handling for final output vs steps
-                elif node_name == "guardrail":
-                    # For guardrails, set the explanation and skip adding a timeline step
-                    final_explanation = state.get('explanation', "I cannot answer this.")
+        try:
+            # Use astream_events to capture detailed events including tokens
+            async for event in graph_app.astream_events(inputs, config=config, version="v1"):
+                # Safety check: Ensure event is a dictionary
+                if not isinstance(event, dict):
                     continue
-                elif node_name == "practice":
-                    # Practice problems are usually returned as the final "answer" or appended.
-                    # Let's append them to the final explanation or return as a step?
-                    # User asked for "generate 2 problems... for the person to solve".
-                    # Let's add it as a step "Practice Problems"
-                    step_info["title"] = "Practice Problems"
-                    problems = state.get('practice_problems', [])
-                    prob_str = "\n".join([f"{i+1}. {p}" for i, p in enumerate(problems)])
-                    step_info["content"] = f"Here are similar problems to try:\n\n{prob_str}"
-                    step_info["content"] = f"Here are similar problems to try:\n\n{prob_str}"
-                elif node_name == "resources":
-                    step_info["title"] = "Related Resources"
-                    # Expecting a bullet list from LLM
-                    step_info["content"] = state.get('references', [''])[0]
+                    
+                kind = event.get("event")
+                metadata = event.get("metadata", {})
+                node_name = metadata.get("langgraph_node", "") if isinstance(metadata, dict) else ""
+                
+                # 1. STREAM TOKENS (Line-by-line / Token-by-token effect)
+                # Only stream tokens for the 'explain' node which provides the main answer
+                if kind == "on_chat_model_stream" and node_name == "explain":
+                    data = event.get("data", {})
+                    chunk = data.get("chunk")
+                    # Handle AIMessageChunk object or dict
+                    content = ""
+                    if hasattr(chunk, "content"):
+                        content = chunk.content
+                    elif isinstance(chunk, dict):
+                        content = chunk.get("content", "")
+                    
+                    if content:
+                        final_answer_accumulator += content
+                        yield json.dumps({"type": "token", "content": content}) + "\n"
 
-                steps.append(step_info)
-        
-        # Store chat in Qdrant
-        await store_chat(
-            user_input=request.input_text, 
-            bot_response=final_explanation,
-            metadata={
-                "model_provider": request.model_provider,
-                "model_name": request.model_name
-            }
-        )
+                # 2. CAPTURE STEPS (Thinking Process)
+                # Trigger when a node finishes (chain_end) and it's one of our graph nodes
+                elif kind == "on_chain_end" and node_name in ["analyze_image", "classify", "real_world", "extract", "solve", "practice", "resources", "guardrail"]:
+                    data = event.get("data", {})
+                    output = data.get("output")
+                    
+                    # Ensure output is a dictionary before accessing fields
+                    if not isinstance(output, dict):
+                         continue
 
-        return {
-            "response": final_explanation,
-            "steps": steps
-        }
+                    step_data = None
+                    
+                    if node_name == "analyze_image":
+                        if request.image_data:
+                            step_data = {"title": "Analyzing Image", "content": "Image content extracted."}
+                    
+                    elif node_name == "classify":
+                        ptype = output.get('problem_type', 'Unknown')
+                        # Skip guardrail triggers here, handled in guardrail node? 
+                        # Actually guardrail node runs separately.
+                        step_data = {
+                            "title": "Classifying Problem", 
+                            "content": f"Identified as: **{ptype}**",
+                            "category": ptype,
+                        }
+                        
+                    elif node_name == "real_world":
+                        step_data = {"title": "Real World Context", "content": output.get('real_world_context', '')}
+                        
+                    elif node_name == "extract":
+                        eqs = output.get('equations', [])
+                        eq_str = "\n".join([f"- {eq}" for eq in eqs])
+                        step_data = {"title": "Extracting Equations", "content": f"Extracted:\n{eq_str}"}
+                        
+                    elif node_name == "solve":
+                        step_data = {"title": "Solving Equations", "content": f"Solution found: {output.get('solution', 'N/A')}"}
+                        
+                    elif node_name == "practice":
+                        probs = output.get('practice_problems', [])
+                        prob_str = "\n".join([f"{i+1}. {p}" for i, p in enumerate(probs)])
+                        step_data = {"title": "Practice Problems", "content": f"Here are similar problems to try:\n\n{prob_str}"}
+                        
+                    elif node_name == "resources":
+                         refs = output.get('references', [''])
+                         step_data = {"title": "Related Resources", "content": refs[0] if refs else ""}
 
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        with open("error.log", "w") as f:
-            f.write(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=str(e))
+                    elif node_name == "guardrail":
+                        # If guardrail triggers, it replaces everything.
+                        # We might need to send this as a massive token chunk or a special event?
+                        # For simplicity, let's just append it to token stream if it wasn't streamed.
+                        explanation = output.get('explanation', '')
+                        # If we haven't streamed anything yet (likely, as explain logic didn't run), stream this now.
+                        if not final_answer_accumulator:
+                            final_answer_accumulator += explanation
+                            yield json.dumps({"type": "token", "content": explanation}) + "\n"
+
+                    if step_data:
+                        yield json.dumps({"type": "step", "data": step_data}) + "\n"
+
+            # 3. DONE
+            # Store chat history before finishing
+            if final_answer_accumulator:
+                 await store_chat(
+                    user_input=request.input_text, 
+                    bot_response=final_answer_accumulator,
+                    metadata={
+                        "model_provider": request.model_provider,
+                        "model_name": request.model_name
+                    }
+                )
+            yield json.dumps({"type": "done"}) + "\n"
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 @app.get("/api/chats")
 async def get_chats():
@@ -183,5 +203,25 @@ async def test_vision():
         import traceback
         return {"status": "error", "message": str(e), "trace": traceback.format_exc()}
 
+# Validates Stats Update Request
+class StatsUpdateRequest(BaseModel):
+    model: str
+    category: str
+    event_type: str # init, compliance, vote
+    value: bool | None # true/false or None for init
+
+from src.storage import save_stats_event, get_aggregated_stats
+
+@app.get("/api/stats")
+async def get_stats():
+    """Fetches aggregated stats from Qdrant."""
+    return get_aggregated_stats()
+
+@app.post("/api/stats/vote")
+async def save_vote(request: StatsUpdateRequest):
+    """Saves a stats event (vote, compliance, or init) to Qdrant."""
+    save_stats_event(request.model, request.category, request.event_type, request.value)
+    return {"status": "success"}
+    
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

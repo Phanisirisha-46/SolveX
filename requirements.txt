@@ -11,3 +11,5 @@ langchain-groq
 qdrant-client
 groq
 httpx
+langchain-ollama
+huggingface_hub

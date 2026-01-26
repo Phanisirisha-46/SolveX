@@ -12,14 +12,6 @@ class LLMFactory:
                 api_key=settings.OPENAI_API_KEY,
                 temperature=0
             )
-        elif provider == "gemini":
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(
-                model=model_name or "gemini-flash-latest",
-                google_api_key=settings.GOOGLE_API_KEY,
-                temperature=0,
-                convert_system_message_to_human=True 
-            )
         elif provider == "anthropic":
             from langchain_anthropic import ChatAnthropic
             return ChatAnthropic(
@@ -27,38 +19,35 @@ class LLMFactory:
                 api_key=settings.ANTHROPIC_API_KEY,
                 temperature=0
             )
-        elif provider.startswith("groq"):
-            # Map frontend IDs to actual Groq model names
-            model_map = {
-                "groq-llama3.3": "llama-3.3-70b-versatile",    # verified
-                "groq-qwen2.5": "qwen-2.5-32b",                # verified available ID (corrected)
-                "groq-llama3.1": "llama-3.1-8b-instant",       # verified
-                "groq-math-wizard": "gemma2-9b-it",            # Math Wizard (Gemma 2)
-            }
-            # Default to Llama 3.3 if generic 'groq' or unknown is passed
-            actual_model = model_map.get(provider, "llama-3.3-70b-versatile")
-            
-            from langchain_groq import ChatGroq
-            return ChatGroq(
-                model=actual_model,
-                api_key=settings.GROQ_API_KEY,
-                temperature=0
-            )
-        else:
-            raise ValueError(f"Unsupported LLM provider: {provider}")
+        
+        # --- SIMPLE GROQ ROUTING (RESET) ---
+        
+        # 1. Map requested provider to specific Groq model
+        # User requested Llama 3.1 as the universal fallback for others
+        model_map = {
+            "groq-llama3.3": "llama-3.3-70b-versatile", # Specific Llama 3.3 request
+            "groq-llama3.1": "llama-3.1-8b-instant",   # Specific Llama 3.1 request
+        }
+        
+        # For Qwen, Gemma, Gemini -> Default to Llama 3.1 as fallback
+        target_model = model_map.get(provider, "llama-3.1-8b-instant")
+        
+        print(f"DEBUG: Routing '{provider}' to Groq Model: '{target_model}'")
+        
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            model=target_model,
+            api_key=settings.GROQ_API_KEY,
+            temperature=0
+        )
 
     @staticmethod
     def get_vision_model():
         """Returns a Gemini 1.5 Flash model for Vision"""
         from langchain_google_genai import ChatGoogleGenerativeAI
         import os
-    @staticmethod
-    def get_vision_model():
-        """Returns a Gemini Flash model for Vision"""
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        import os
         return ChatGoogleGenerativeAI(
-            model="gemini-flash-latest",
+            model="gemini-2.0-flash",
             google_api_key=os.environ.get("GOOGLE_API_KEY"),
             temperature=0
         )
