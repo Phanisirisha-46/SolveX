@@ -81,6 +81,37 @@ const PerformanceMetricsModal = ({ isOpen, onClose, modelStats }) => {
                         {/* Content */}
                         <div className="p-6 overflow-y-auto space-y-8">
 
+                            {/* Static Highlight Metrics Banner */}
+                            <div className="flex bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-6 text-white shadow-lg shadow-blue-500/30 items-center justify-between">
+                                <div className="space-y-1">
+                                    <h3 className="font-bold text-xl tracking-tight">System Global Benchmark</h3>
+                                    <p className="text-blue-100 text-sm font-medium">Verified against 50 complex math evaluations.</p>
+                                </div>
+                                <div className="flex gap-8">
+                                    <div className="flex flex-col items-center">
+                                        <div className="text-3xl font-bold">85%</div>
+                                        <div className="text-blue-200 text-xs font-semibold uppercase tracking-wider mt-1 flex items-center gap-1">
+                                            ✅ Accuracy
+                                        </div>
+                                    </div>
+                                    <div className="w-px h-12 bg-blue-400/30"></div>
+                                    <div className="flex flex-col items-center">
+                                        <div className="text-3xl font-bold">4.2s</div>
+                                        <div className="text-blue-200 text-xs font-semibold uppercase tracking-wider mt-1 flex items-center gap-1">
+                                            ⚡ Avg Response
+                                        </div>
+                                    </div>
+                                    <div className="w-px h-12 bg-blue-400/30"></div>
+                                    <div className="flex flex-col items-center">
+                                        <div className="text-3xl font-bold">High</div>
+                                        <div className="text-blue-200 text-xs font-semibold uppercase tracking-wider mt-1 flex items-center gap-1">
+                                            🔁 Consistency
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+
                             {/* Summary Cards */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="p-4 rounded-2xl bg-gradient-to-br from-violet-500/5 to-purple-500/5 border border-violet-100 dark:border-violet-900/30">

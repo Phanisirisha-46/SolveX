@@ -85,15 +85,19 @@ async def store_chat(user_input: str, bot_response: str, metadata: Optional[Dict
         return
 
     try:
-        # Embed chat (simplified for brevity, usually we embed user_input or summary)
         api_key = os.getenv("GOOGLE_API_KEY")
-        if not api_key:
-             print("ERROR: GOOGLE_API_KEY not found in environment.")
-             return # Early exit
+        vector = None
+        if api_key:
+            try:
+                embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
+                vector = await embeddings.aembed_query(user_input)
+            except Exception as e:
+                print(f"Embedding generation failed: {e}. Falling back to zero vector.")
         
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-        vector = await embeddings.aembed_query(user_input)
-        
+        # If API key missing or quota exhausted, strictly insert dummy vector to guarantee persistence
+        if not vector:
+            vector = [0.0] * 768
+            
         payload = {
             "user_input": user_input,
             "bot_response": bot_response,

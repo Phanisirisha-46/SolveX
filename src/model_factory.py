@@ -8,7 +8,7 @@ class LLMFactory:
         if provider == "openai":
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
-                model=model_name or "gpt-4-turbo",
+                model=model_name or "gpt-4o-mini",
                 api_key=settings.OPENAI_API_KEY,
                 temperature=0
             )

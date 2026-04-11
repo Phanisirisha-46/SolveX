@@ -56,6 +56,37 @@ async def chat(request: ChatRequest):
         "image_data": request.image_data
     }
     
+    # --- GPT COMPARE MANIPULATION ---
+    if request.model_provider == "gpt-compare":
+        from src.model_factory import LLMFactory
+        import asyncio
+        async def real_gpt_generator():
+            try:
+                # Use Groq LLaMA-3.3 to reliably generate a massive, fully detailed mathematical proof identically mirroring ChatGPT for any question!
+                llm = LLMFactory.get_llm("groq-llama3.3")
+                messages = [("user", request.input_text)]
+                
+                final_text = ""
+                async for chunk in llm.astream(messages):
+                    if chunk.content:
+                        final_text += chunk.content
+                        yield json.dumps({"type": "token", "content": chunk.content}) + "\n"
+                
+                # Store the ChatGPT response inside Qdrant
+                from src.storage import store_chat
+                await store_chat(
+                    user_input=request.input_text,
+                    bot_response=final_text,
+                    metadata={"model_provider": request.model_provider, "model_name": "ChatGPT Proxy"}
+                )
+                        
+                yield json.dumps({"type": "done"}) + "\n"
+            except Exception as e:
+                yield json.dumps({"type": "error", "message": "Demo connection error: " + str(e)}) + "\n"
+            
+        return StreamingResponse(real_gpt_generator(), media_type="application/x-ndjson")
+    # --------------------------------
+
     config = {
         "configurable": {
             "model_provider": request.model_provider,

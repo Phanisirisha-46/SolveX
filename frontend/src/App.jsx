@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Calculator, ChevronRight, Brain, Zap, Box, Star, Image, ShieldCheck, Cpu, Lock as LockIcon, Mic, MicOff, BarChart3, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { Send, Bot, User, Loader2, Sparkles, Sun, Moon, Trash2, PlusCircle, Calculator, ChevronRight, Brain, Zap, Box, Star, Image, ShieldCheck, Cpu, Lock as LockIcon, Mic, MicOff, BarChart3, ThumbsUp, ThumbsDown, X, Play } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -107,6 +107,88 @@ function App() {
   const [userRole, setUserRole] = useState('User');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [tempUsername, setTempUsername] = useState('');
+
+  // --- COMPARE WITH GPT STATE ---
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [comparePrompt, setComparePrompt] = useState("");
+  const [isComparing, setIsComparing] = useState(false);
+  const [compareSolveX, setCompareSolveX] = useState({ content: "", steps: [] });
+  const [compareGpt, setCompareGpt] = useState("");
+
+  const handleCompareSubmit = async (e) => {
+    e.preventDefault();
+    if (!comparePrompt.trim() || isComparing) return;
+
+    setIsComparing(true);
+    setCompareSolveX({ content: "", steps: [] });
+    setCompareGpt("");
+
+    const solvexPayload = {
+      input_text: comparePrompt,
+      model_provider: "groq-llama3.3",
+      image_data: null
+    };
+
+    // User requested to open native ChatGPT in a new browser window rather than streaming internally
+    window.open(`https://chatgpt.com/?q=${encodeURIComponent(comparePrompt)}`, '_blank');
+    setCompareGpt("Redirected to native ChatGPT!\n\nPlease look at your newly opened browser tab to see the authentic ChatGPT output. You can compare it visually with the live SolveX Engine running on the left!");
+
+    const fetchStream = async (payload, onToken, onStep, onEnd) => {
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) throw new Error("API Error");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              if (!line.trim()) continue;
+              try {
+                const data = JSON.parse(line);
+                if (data.type === 'token') onToken(data.content);
+                else if (data.type === 'step') onStep(data.data);
+                else if (data.type === 'error') console.error(data.message);
+              } catch (e) { }
+            }
+          }
+          if (done) break;
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        onEnd();
+      }
+    };
+
+    let solvexDone = false;
+    let gptDone = false;
+
+    const checkDone = () => {
+      if (solvexDone && gptDone) setIsComparing(false);
+    };
+
+    fetchStream(
+      solvexPayload,
+      (t) => setCompareSolveX(p => ({ ...p, content: p.content + t })),
+      (s) => setCompareSolveX(p => ({ ...p, steps: [...p.steps, s] })),
+      () => { solvexDone = true; checkDone(); }
+    );
+
+    // Mark GPT completion as immediate since it's opening externally
+    gptDone = true;
+    checkDone();
+  };
 
   // --- METRICS STATE ---
   const [isMetricsOpen, setIsMetricsOpen] = useState(false);
@@ -812,6 +894,14 @@ function App() {
             <PlusCircle className="w-4 h-4" />
             <span className="text-sm">New Calculation</span>
           </button>
+
+          <button
+            onClick={() => setIsCompareOpen(true)}
+            className="w-full mt-3 flex items-center justify-center gap-2 p-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white rounded-xl shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98] font-medium"
+          >
+            <Zap className="w-4 h-4" />
+            <span className="text-sm">Live Benchmark</span>
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
@@ -1167,6 +1257,81 @@ function App() {
         onClose={() => setIsMetricsOpen(false)}
         modelStats={modelStats}
       />
+
+      {/* Compare Modal */}
+      <AnimatePresence>
+        {isCompareOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 w-full max-w-6xl h-[90vh] rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col"
+            >
+              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-violet-500/10 rounded-xl text-violet-500">
+                    <Zap className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-white">Live Benchmark: SolveX vs Standard GPT</h2>
+                    <p className="text-sm text-slate-500">See the difference in reasoning capability</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsCompareOpen(false)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                <form onSubmit={handleCompareSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={comparePrompt}
+                    onChange={(e) => setComparePrompt(e.target.value)}
+                    placeholder="Enter a complex math or logic problem..."
+                    disabled={isComparing}
+                    className="flex-1 px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-violet-500 outline-none"
+                  />
+                  <button type="submit" disabled={isComparing || !comparePrompt.trim()} className="px-6 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-medium flex items-center gap-2 disabled:opacity-50 transition-all">
+                    {isComparing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
+                    Run Benchmark
+                  </button>
+                </form>
+              </div>
+
+              <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-100 dark:bg-slate-950">
+                <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800">
+                  <div className="p-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 font-bold text-accent flex items-center gap-2 justify-center shadow-sm z-10">
+                    <Sparkles className="w-4 h-4" /> SolveX Engine
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 bg-white/50 dark:bg-slate-900/50">
+                    {compareSolveX.steps.length > 0 && (
+                      <ThinkingProcess steps={compareSolveX.steps} isComplete={!isComparing} />
+                    )}
+                    <div className="prose prose-lg dark:prose-invert max-w-none text-slate-700 dark:text-slate-200 font-light mt-4">
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{compareSolveX.content}</ReactMarkdown>
+                    </div>
+                    {compareSolveX.content.length === 0 && !isComparing && <div className="h-full flex items-center justify-center opacity-30 italic flex-col gap-2"><Bot className="w-10 h-10" /><p>Awaiting Input...</p></div>}
+                  </div>
+                </div>
+
+                <div className="flex-1 flex flex-col">
+                  <div className="p-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 font-bold text-slate-500 dark:text-slate-400 flex items-center gap-2 justify-center shadow-sm z-10">
+                    <Bot className="w-4 h-4" /> ChatGPT / Standard Generic LLM
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-800/20">
+                    <div className="prose prose-lg dark:prose-invert max-w-none text-slate-600 dark:text-slate-400 font-light">
+                      <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{compareGpt}</ReactMarkdown>
+                    </div>
+                    {compareGpt.length === 0 && !isComparing && <div className="h-full flex items-center justify-center opacity-30 italic flex-col gap-2"><Bot className="w-10 h-10" /><p>Awaiting Input...</p></div>}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
